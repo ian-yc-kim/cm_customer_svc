@@ -127,73 +127,127 @@ POST /api/register
 
 ---
 
-# Customers
+# Customer Management API
 
 Note: All endpoints below require a valid session cookie named access_token. The cookie must be sent with requests (TestClient helpers or browser will manage sending the cookie).
+
+This dedicated section documents the Customer CRUD endpoints including the paginated list endpoint. Where examples are shown they reflect the API request/response shapes used by the service.
 
 Customer object (API representation)
 - customer_id: UUID string
 - customer_name: string
 - customer_contact: string|null (validated phone format)
 - customer_address: string|null (sanitized)
-- managed_by: string (employee id; see rules)
+- managed_by: string (employee id)
 - created_at: ISO-8601 timestamp
 - updated_at: ISO-8601 timestamp
+
+Notes on managed_by
+- For create flows the server automatically sets managed_by to the authenticated user's employee id (derived from the access_token cookie).
+- Clients should not supply managed_by during creation; any managed_by provided in the POST payload is ignored.
+- For updates (PUT) managed_by may be supplied to change the manager; it must reference an existing user.
 
 
 ## Create Customer
 
 POST /api/customers
 
-- Description: Create a new customer record and assign a manager.
+- Method: POST
+- Path: /api/customers
+- Description: Create a new customer record. managed_by is automatically set to the authenticated user's ID.
 - Authentication: Required (access_token cookie).
 - Request model: CustomerCreate
   - customer_name: required, 1-100 chars, sanitized
   - customer_contact: optional, phone format validated (7-15 digits total; allowed characters + digits spaces - () . )
   - customer_address: optional, sanitized
-  - managed_by: required employee id; validated
-    - Primary accepted form: exactly 8 digits
-    - Compatibility: accepts EMP + 5 digits (e.g., EMP00001) for backward compatibility
-- Responses:
-  - 201 Created
-    - Body: { "message": "customer created", "customer": { ...Customer... } }
-  - 400 Bad Request
-    - Occurs when managed_by does not reference an existing user
-  - 401 Unauthorized
-    - Missing/invalid/expired auth cookie
-  - 422 Unprocessable Entity
-    - Validation errors from Pydantic
-  - 500 Internal Server Error
-- Example request:
+  - managed_by: omitted from example; server sets managed_by from the authenticated user
+- Example request (note managed_by omitted):
   {
     "customer_name": "Acme Co",
     "customer_contact": "+1 (555) 123-4567",
-    "customer_address": "123 Main St, Suite 200",
-    "managed_by": "12345678"
+    "customer_address": "123 Main St, Suite 200"
   }
-- Example curl:
+- Success Response:
+  - 201 Created
+  - Body: Example CustomerResponse JSON
+    {
+      "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+      "customer_name": "Acme Co",
+      "customer_contact": "+1 (555) 123-4567",
+      "customer_address": "123 Main St, Suite 200",
+      "managed_by": "00020001",
+      "created_at": "2023-01-01T12:00:00Z",
+      "updated_at": "2023-01-01T12:00:00Z"
+    }
+- Error Responses:
+  - 400 Bad Request
+    - Occurs when managed_by (for updates) references a non-existent user or business rules fail.
+  - 401 Unauthorized
+    - Missing/invalid/expired auth cookie
+  - 422 Unprocessable Entity
+    - Pydantic validation errors (e.g., invalid phone format, missing required fields)
+  - 500 Internal Server Error
+
+Curl example:
   curl -i -X POST http://localhost:8000/api/customers \
     -H "Content-Type: application/json" \
     --cookie "access_token=<JWT>" \
-    -d '{"customer_name":"Acme Co","customer_contact":"+1 (555) 123-4567","customer_address":"123 Main St","managed_by":"12345678"}'
+    -d '{"customer_name":"Acme Co","customer_contact":"+1 (555) 123-4567","customer_address":"123 Main St"}'
 
 
-## Get Customer
+## Get Customers (Paginated list)
+
+GET /api/customers
+
+- Method: GET
+- Path: /api/customers
+- Description: Retrieve a paginated list of all customer records.
+- Authentication: Required (access_token cookie).
+- Query Parameters:
+  - page: integer, default 1 (1-based)
+  - page_size: integer, default 10 (max 100)
+- Success Response (200 OK) Example: PaginatedCustomerResponse
+  {
+    "total_count": 42,
+    "page": 1,
+    "page_size": 10,
+    "items": [
+      {
+        "customer_id": "550e8400-e29b-41d4-a716-446655440000",
+        "customer_name": "Acme Co",
+        "customer_contact": "+1 (555) 123-4567",
+        "customer_address": "123 Main St, Suite 200",
+        "managed_by": "00020001",
+        "created_at": "2023-01-01T12:00:00Z",
+        "updated_at": "2023-01-01T12:00:00Z"
+      }
+    ]
+  }
+- Notes:
+  - total_count reports the total number of customer records across all pages.
+  - items contains up to page_size CustomerResponse objects for the requested page.
+  - If page requests fall outside available records items will be an empty list and page/page_size still reflect request.
+- Error Responses:
+  - 401 Unauthorized when the access_token cookie is missing/invalid/expired.
+
+
+## Get Customer by ID
 
 GET /api/customers/{customer_id}
 
-- Description: Retrieve a customer by UUID.
-- Path parameter: customer_id (UUID string)
+- Method: GET
+- Path: /api/customers/{customer_id}
+- Description: Retrieve a single customer record by its ID.
+- Path Parameters:
+  - customer_id: UUID string
 - Authentication: Required (access_token cookie)
-- Responses:
-  - 200 OK
-    - Body: { "customer": { ...Customer... } }
+- Success Response (200 OK): CustomerResponse example same as Create success response
+- Error Responses:
   - 401 Unauthorized
-    - Missing/invalid/expired auth cookie
-  - 404 Not Found
-    - When the customer does not exist or customer_id is invalid
+  - 404 Not Found when the customer does not exist or the provided id is invalid
   - 500 Internal Server Error
-- Example curl:
+
+Curl example:
   curl -i -X GET http://localhost:8000/api/customers/550e8400-e29b-41d4-a716-446655440000 \
     --cookie "access_token=<JWT>"
 
@@ -202,29 +256,24 @@ GET /api/customers/{customer_id}
 
 PUT /api/customers/{customer_id}
 
-- Description: Update customer fields. All fields optional in request.
-- Path parameter: customer_id (UUID string)
-- Authentication: Required (access_token cookie)
-- Request model: CustomerUpdate (all fields optional)
-  - Validations and sanitization same as create
-  - If managed_by is present it must reference an existing user
-- Responses:
+- Method: PUT
+- Path: /api/customers/{customer_id}
+- Description: Update an existing customer record. All fields are optional in the request body.
+- Path Parameters:
+  - customer_id: UUID string
+- Request Body: CustomerUpdate (all fields optional)
+  - managed_by may be provided to change the assigned manager; it must reference an existing user.
+- Success Response:
   - 200 OK
-    - Body: { "customer": { ...Customer... } }
-  - 400 Bad Request
-    - Invalid managed_by that does not match an existing user
+  - Body: CustomerResponse
+- Error Responses:
+  - 400 Bad Request when managed_by references a non-existent user
   - 401 Unauthorized
-  - 404 Not Found
-    - Customer not found
-  - 422 Unprocessable Entity
-    - Validation errors
+  - 404 Not Found when the customer does not exist
+  - 422 Unprocessable Entity for invalid inputs
   - 500 Internal Server Error
-- Example request:
-  {
-    "customer_contact": "(555) 999-0000",
-    "managed_by": "EMP00001"
-  }
-- Example curl:
+
+Curl example:
   curl -i -X PUT http://localhost:8000/api/customers/550e8400-e29b-41d4-a716-446655440000 \
     -H "Content-Type: application/json" \
     --cookie "access_token=<JWT>" \
@@ -235,15 +284,20 @@ PUT /api/customers/{customer_id}
 
 DELETE /api/customers/{customer_id}
 
-- Description: Delete a customer by UUID.
-- Path parameter: customer_id (UUID string)
+- Method: DELETE
+- Path: /api/customers/{customer_id}
+- Description: Permanently delete a customer record.
+- Path Parameters:
+  - customer_id: UUID string
 - Authentication: Required (access_token cookie)
-- Responses:
+- Success Response:
   - 204 No Content
+- Error Responses:
   - 401 Unauthorized
-  - 404 Not Found
+  - 404 Not Found when the customer does not exist
   - 500 Internal Server Error
-- Example curl:
+
+Curl example:
   curl -i -X DELETE http://localhost:8000/api/customers/550e8400-e29b-41d4-a716-446655440000 \
     --cookie "access_token=<JWT>"
 
@@ -287,5 +341,7 @@ DELETE /api/customers/{customer_id}
 
 # Change Log
 
-- Added User Registration and full Customer CRUD documentation (create, get, update, delete).
-- Documented request/response models, authentication requirements, and validation rules.
+- Added dedicated Customer Management API section to centralize customer CRUD documentation.
+- Clarified that POST /api/customers ignores managed_by in the request and auto-assigns managed_by from authenticated user.
+- Documented GET /api/customers pagination with page and page_size and PaginatedCustomerResponse shape.
+- Updated examples to reflect the created/response shapes and authentication cookie requirement.
