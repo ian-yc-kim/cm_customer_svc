@@ -61,7 +61,12 @@ def test_decode_access_token_missing_claims_returns_payload_without_sub():
 
 # Integration tests using TestClient fixture
 def test_login_success_sets_secure_http_only_cookie(client):
-    resp = client.post("/api/auth/login", json={"username": "testuser", "password": "password"})
+    # register test user
+    reg_payload = {"employee_id": "00001234", "employee_name": "Test User", "password": "Password123"}
+    r = client.post("/api/register", json=reg_payload)
+    assert r.status_code == 201
+
+    resp = client.post("/api/auth/login", json={"employee_id": "00001234", "password": "Password123"})
     assert resp.status_code == 200
 
     sc = resp.headers.get("set-cookie", "")
@@ -70,7 +75,7 @@ def test_login_success_sets_secure_http_only_cookie(client):
     assert "httponly" in sc.lower()
     # SameSite present (Lax expected)
     assert "samesite=lax" in sc.lower()
-    # max-age presence for 24h default in config (ACCESS_TOKEN_EXPIRE_MINUTES)
+    # max-age presence for configured minutes
     expected_max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60
     assert str(expected_max_age) in sc
     # secure flag when configured
@@ -79,7 +84,12 @@ def test_login_success_sets_secure_http_only_cookie(client):
 
 
 def test_login_failure_bad_credentials_returns_401(client):
-    resp = client.post("/api/auth/login", json={"username": "testuser", "password": "badpass"})
+    # register test user
+    reg_payload = {"employee_id": "00001234", "employee_name": "Test User", "password": "Password123"}
+    r = client.post("/api/register", json=reg_payload)
+    assert r.status_code == 201
+
+    resp = client.post("/api/auth/login", json={"employee_id": "00001234", "password": "badpass"})
     assert resp.status_code == 401
 
 
@@ -94,14 +104,18 @@ def test_logout_clears_session_cookie(client):
 
 
 def test_users_me_with_valid_session_cookie(client):
-    # login to obtain cookie stored in TestClient
-    resp = client.post("/api/auth/login", json={"username": "testuser", "password": "password"})
+    # register and login to obtain cookie stored in TestClient
+    reg_payload = {"employee_id": "00001234", "employee_name": "Test User", "password": "Password123"}
+    r = client.post("/api/register", json=reg_payload)
+    assert r.status_code == 201
+
+    resp = client.post("/api/auth/login", json={"employee_id": "00001234", "password": "Password123"})
     assert resp.status_code == 200
 
     # subsequent request should include cookie automatically
     resp2 = client.get("/api/users/me")
     assert resp2.status_code == 200
-    assert resp2.json().get("current_user_id") == "testuser"
+    assert resp2.json().get("current_user_id") == "00001234"
 
 
 def test_users_me_without_cookie_returns_401(client):

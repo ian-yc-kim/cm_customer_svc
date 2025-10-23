@@ -6,13 +6,17 @@ from cm_customer_svc.config import SECRET_KEY, ALGORITHM
 
 
 def test_me_success_with_valid_cookie(client):
-    # login sets cookie
-    resp = client.post("/api/auth/login", json={"username": "testuser", "password": "password"})
+    # register and login sets cookie
+    reg_payload = {"employee_id": "00001234", "employee_name": "Test User", "password": "Password123"}
+    r = client.post("/api/register", json=reg_payload)
+    assert r.status_code == 201
+
+    resp = client.post("/api/auth/login", json={"employee_id": "00001234", "password": "Password123"})
     assert resp.status_code == 200
 
     resp2 = client.get("/api/users/me")
     assert resp2.status_code == 200
-    assert resp2.json().get("current_user_id") == "testuser"
+    assert resp2.json().get("current_user_id") == "00001234"
 
 
 def test_me_unauthorized_without_cookie(client):
