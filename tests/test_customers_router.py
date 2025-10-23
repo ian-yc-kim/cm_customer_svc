@@ -27,7 +27,6 @@ def test_post_customer_success_and_persist(client, db_session):
         "customer_name": "Acme Corp",
         "customer_contact": "1234567890",
         "customer_address": "1 Main St",
-        "managed_by": manager_emp,
     }
 
     resp = client.post("/api/customers", json=payload)

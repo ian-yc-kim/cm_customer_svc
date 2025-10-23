@@ -21,19 +21,14 @@ def test_userlogin_invalid_employee_id_raises():
 
 
 def test_customercreate_valid_and_optional_none():
-    c = CustomerCreate(customer_name="Acme Corp", customer_contact=None, customer_address=None, managed_by="00001234")
+    c = CustomerCreate(customer_name="Acme Corp", customer_contact=None, customer_address=None)
     assert c.customer_name == "Acme Corp"
     assert c.customer_contact is None
 
 
 def test_customercreate_invalid_phone_raises():
     with pytest.raises(ValidationError):
-        CustomerCreate(customer_name="X", customer_contact="bad-phone", customer_address=None, managed_by="00001234")
-
-
-def test_customercreate_invalid_managed_by_raises():
-    with pytest.raises(ValidationError):
-        CustomerCreate(customer_name="X", customer_contact=None, customer_address=None, managed_by="ABC")
+        CustomerCreate(customer_name="X", customer_contact="bad-phone", customer_address=None)
 
 
 def test_customerupdate_sanitization_and_optional():

@@ -1,4 +1,4 @@
 from .user import UserCreate, UserLogin
-from .customer import CustomerCreate, CustomerUpdate
+from .customer import CustomerCreate, CustomerUpdate, CustomerResponse
 
-__all__ = ["UserCreate", "UserLogin", "CustomerCreate", "CustomerUpdate"]
+__all__ = ["UserCreate", "UserLogin", "CustomerCreate", "CustomerUpdate", "CustomerResponse"]

@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, Any
+from uuid import UUID
+from datetime import datetime
 import re
 
 from cm_customer_svc.utils.validation_utils import (
@@ -13,7 +15,6 @@ class CustomerCreate(BaseModel):
     customer_name: str = Field(min_length=1, max_length=100)
     customer_contact: Optional[str] = None
     customer_address: Optional[str] = None
-    managed_by: str = Field(min_length=8, max_length=8)
 
     @field_validator("customer_name", mode="before")
     @classmethod
@@ -30,21 +31,18 @@ class CustomerCreate(BaseModel):
     def _sanitize_address(cls, v: Any) -> Optional[str]:
         return sanitize_input(v)
 
-    @field_validator("managed_by", mode="before")
-    @classmethod
-    def _validate_managed_by(cls, v: Any) -> str:
-        """Validate managed_by employee id.
 
-        Prefer central validate_employee_id_format. If that enforces a numeric-only
-        format, fall back to accepting the EMPxxxxx pattern used by tests (EMP + 5 digits).
-        """
-        try:
-            return validate_employee_id_format(v)
-        except Exception:
-            # Accept pattern like EMP00001 (EMP followed by 5 digits) to be compatible
-            if isinstance(v, str) and re.fullmatch(r"EMP\d{5}", v):
-                return v
-            raise
+class CustomerResponse(BaseModel):
+    customer_id: UUID
+    customer_name: str
+    customer_contact: Optional[str]
+    customer_address: Optional[str]
+    managed_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    # allow building from ORM-like objects (SQLAlchemy instances)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerUpdate(BaseModel):

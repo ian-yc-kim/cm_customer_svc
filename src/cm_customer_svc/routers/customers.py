@@ -2,30 +2,18 @@ import logging
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from cm_customer_svc.models.customer import Customer
 from cm_customer_svc.models.user import User
-from cm_customer_svc.schemas.customer import CustomerCreate, CustomerUpdate
+from cm_customer_svc.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
 from cm_customer_svc.models.base import get_db
 from cm_customer_svc.dependencies.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
 customers_router = APIRouter()
-
-
-def _customer_to_dict(cust: Customer) -> dict:
-    return {
-        "customer_id": str(cust.customer_id),
-        "customer_name": cust.customer_name,
-        "customer_contact": cust.customer_contact,
-        "customer_address": cust.customer_address,
-        "managed_by": cust.managed_by,
-        "created_at": cust.created_at.isoformat() if cust.created_at is not None else None,
-        "updated_at": cust.updated_at.isoformat() if cust.updated_at is not None else None,
-    }
 
 
 def _parse_customer_pk(customer_id: str) -> uuid.UUID:
@@ -38,25 +26,25 @@ def _parse_customer_pk(customer_id: str) -> uuid.UUID:
 
 
 @customers_router.post("/customers", status_code=status.HTTP_201_CREATED)
-def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), _=Depends(get_current_user)) -> JSONResponse:
-    """Create a new customer. Validate managed_by exists."""
+def create_customer(payload: CustomerCreate, current_user_id: str = Depends(get_current_user), db: Session = Depends(get_db)) -> CustomerResponse:
+    """Create a new customer. managed_by is set from authenticated user."""
     try:
-        # validate managed_by exists
-        manager = db.get(User, payload.managed_by)
+        # validate current_user_id exists
+        manager = db.get(User, current_user_id)
         if manager is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"managed_by employee_id {payload.managed_by} does not exist")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"managed_by employee_id {current_user_id} does not exist")
 
         customer = Customer(
             customer_name=payload.customer_name,
             customer_contact=payload.customer_contact,
             customer_address=payload.customer_address,
-            managed_by=payload.managed_by,
+            managed_by=current_user_id,
         )
         db.add(customer)
         db.commit()
         db.refresh(customer)
 
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "customer created", "customer": _customer_to_dict(customer)})
+        return CustomerResponse.model_validate(customer)
 
     except HTTPException:
         raise
@@ -70,13 +58,13 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), _=De
 
 
 @customers_router.get("/customers/{customer_id}")
-def get_customer(customer_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)) -> JSONResponse:
+def get_customer(customer_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)) -> CustomerResponse:
     try:
         pk = _parse_customer_pk(customer_id)
         customer = db.get(Customer, pk)
         if customer is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="customer not found")
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"customer": _customer_to_dict(customer)})
+        return CustomerResponse.model_validate(customer)
     except HTTPException:
         raise
     except Exception as e:
@@ -85,7 +73,7 @@ def get_customer(customer_id: str, db: Session = Depends(get_db), _=Depends(get_
 
 
 @customers_router.put("/customers/{customer_id}")
-def update_customer(customer_id: str, payload: CustomerUpdate, db: Session = Depends(get_db), _=Depends(get_current_user)) -> JSONResponse:
+def update_customer(customer_id: str, payload: CustomerUpdate, db: Session = Depends(get_db), _=Depends(get_current_user)) -> CustomerResponse:
     try:
         pk = _parse_customer_pk(customer_id)
         customer = db.get(Customer, pk)
@@ -111,7 +99,7 @@ def update_customer(customer_id: str, payload: CustomerUpdate, db: Session = Dep
         db.commit()
         db.refresh(customer)
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"customer": _customer_to_dict(customer)})
+        return CustomerResponse.model_validate(customer)
 
     except HTTPException:
         raise
