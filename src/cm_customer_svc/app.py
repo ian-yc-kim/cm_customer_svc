@@ -6,6 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from cm_customer_svc.routers.auth import auth_router
 from cm_customer_svc.routers.users import users_router
+from cm_customer_svc.routers.registration import registration_router
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ app = FastAPI(debug=True)
 # register routers
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(users_router, prefix="/api/users")
+app.include_router(registration_router, prefix="/api")
 
 
 def _is_running_under_pytest() -> bool:
