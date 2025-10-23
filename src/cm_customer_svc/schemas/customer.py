@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, Any
+from typing import Optional, Any, List
 from uuid import UUID
 from datetime import datetime
 import re
@@ -77,3 +77,17 @@ class CustomerUpdate(BaseModel):
             if isinstance(v, str) and re.fullmatch(r"EMP\d{5}", v):
                 return v
             raise
+
+
+class PaginationParams(BaseModel):
+    page: int = Field(1, ge=1)
+    page_size: int = Field(10, ge=1, le=100)
+
+
+class PaginatedCustomerResponse(BaseModel):
+    total_count: int
+    page: int
+    page_size: int
+    items: List[CustomerResponse]
+
+    model_config = ConfigDict(from_attributes=True)

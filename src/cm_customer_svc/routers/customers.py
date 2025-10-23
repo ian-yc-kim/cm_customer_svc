@@ -4,10 +4,17 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func
 
 from cm_customer_svc.models.customer import Customer
 from cm_customer_svc.models.user import User
-from cm_customer_svc.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
+from cm_customer_svc.schemas.customer import (
+    CustomerCreate,
+    CustomerUpdate,
+    CustomerResponse,
+    PaginationParams,
+    PaginatedCustomerResponse,
+)
 from cm_customer_svc.models.base import get_db
 from cm_customer_svc.dependencies.auth import get_current_user
 
@@ -65,6 +72,32 @@ def get_customer(customer_id: str, db: Session = Depends(get_db), _=Depends(get_
         if customer is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="customer not found")
         return CustomerResponse.model_validate(customer)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="internal server error")
+
+
+@customers_router.get("/customers", response_model=PaginatedCustomerResponse)
+def get_all_customers(pagination: PaginationParams = Depends(), db: Session = Depends(get_db), _=Depends(get_current_user)) -> PaginatedCustomerResponse:
+    try:
+        offset = (pagination.page - 1) * pagination.page_size
+
+        items_stmt = select(Customer).offset(offset).limit(pagination.page_size)
+        items = db.execute(items_stmt).scalars().all()
+
+        count_stmt = select(func.count()).select_from(Customer)
+        total_count = db.execute(count_stmt).scalar_one()
+
+        items_out = [CustomerResponse.model_validate(c) for c in items]
+
+        return PaginatedCustomerResponse(
+            total_count=int(total_count),
+            page=pagination.page,
+            page_size=pagination.page_size,
+            items=items_out,
+        )
     except HTTPException:
         raise
     except Exception as e:
